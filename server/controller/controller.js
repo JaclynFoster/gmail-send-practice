@@ -15,10 +15,12 @@ const sendEmail = (req, res) => {
   send(
     {
       subject: `Portfolio email from ${email}`,
-      text: `
+      html: `
+      <div>
         name: ${name}
         email: ${email}
         message: ${message}
+        </div>
         `
     },
     (error, result, fullResult) => {

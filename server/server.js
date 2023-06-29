@@ -1,6 +1,13 @@
 const express = require('express')
 const cors = require('cors')
 const { json } = require('body-parser')
+const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
+const OAuth2 = google.auth.OAuth2;
+const fs = require('fs').promises
+const process = require('process')
+const { authenticate } = require('@google-cloud/local-auth')
+require('dotenv').config()
 
 const port = 4900
 
@@ -11,18 +18,16 @@ app.use(json())
 app.use(cors())
 
 const path = require('path')
-const { sendEmail } = require('./controller/controller')
+const { sendMail } = require('./gmail')
 
-app.post('/sendEmail', sendEmail)
+
+app.post(`/sendMail:userId`, sendMail)
 
 app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, '/../public/index.html'))
 })
-const fs = require('fs').promises
-const path = require('path')
-const process = require('process')
-const { authenticate } = require('@google-cloud/local-auth')
-const { google } = require('googleapis')
+
+
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
@@ -43,6 +48,7 @@ async function loadSavedCredentialsIfExist() {
     const credentials = JSON.parse(content)
     return google.auth.fromJSON(credentials)
   } catch (err) {
+    console.log("error on loadSavedCredentialsIfExist:", err)
     return null
   }
 }
@@ -54,16 +60,21 @@ async function loadSavedCredentialsIfExist() {
  * @return {Promise<void>}
  */
 async function saveCredentials(client) {
-  const content = await fs.readFile(CREDENTIALS_PATH)
-  const keys = JSON.parse(content)
-  const key = keys.installed || keys.web
-  const payload = JSON.stringify({
-    type: 'authorized_user',
-    client_id: key.client_id,
-    client_secret: key.client_secret,
-    refresh_token: client.credentials.refresh_token
-  })
-  await fs.writeFile(TOKEN_PATH, payload)
+  try{
+
+    const content = await fs.readFile(CREDENTIALS_PATH)
+    const keys = JSON.parse(content)
+    const key = keys.installed || keys.web
+    const payload = JSON.stringify({
+      type: 'authorized_user',
+      client_id: key.client_id,
+      client_secret: key.client_secret,
+      refresh_token: client.credentials.refresh_token
+    })
+    await fs.writeFile(TOKEN_PATH, payload)
+  } catch (err) {
+    console.log("Error on saveCredentials:", err)
+  }
 }
 
 /**
@@ -71,18 +82,23 @@ async function saveCredentials(client) {
  *
  */
 async function authorize() {
-  let client = await loadSavedCredentialsIfExist()
-  if (client) {
+  try {
+
+    let client = await loadSavedCredentialsIfExist()
+    if (client) {
+      return client
+    }
+    client = await authenticate({
+      scopes: SCOPES,
+      keyfilePath: CREDENTIALS_PATH
+    })
+    if (client.credentials) {
+      await saveCredentials(client)
+    }
     return client
+  } catch (err) {
+    console.log("Error on authorize", err)
   }
-  client = await authenticate({
-    scopes: SCOPES,
-    keyfilePath: CREDENTIALS_PATH
-  })
-  if (client.credentials) {
-    await saveCredentials(client)
-  }
-  return client
 }
 
 /**
@@ -91,19 +107,24 @@ async function authorize() {
  * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
  */
 async function listLabels(auth) {
-  const gmail = google.gmail({ version: 'v1', auth })
-  const res = await gmail.users.labels.list({
-    userId: 'me'
-  })
-  const labels = res.data.labels
-  if (!labels || labels.length === 0) {
-    console.log('No labels found.')
-    return
+  try {
+
+    const gmail = google.gmail({ version: 'v1', auth })
+    const res = await gmail.users.labels.list({
+      userId: 'fosterjaclynd@gmail.com'
+    })
+    const labels = res.data.labels
+    if (!labels || labels.length === 0) {
+      console.log('No labels found.')
+      return
+    }
+    console.log('Labels:')
+    labels.forEach(label => {
+      console.log(`- ${label.name}`)
+    })
+  } catch (err) {
+    console.log("Error on listLabels:", err)
   }
-  console.log('Labels:')
-  labels.forEach(label => {
-    console.log(`- ${label.name}`)
-  })
 }
 
 authorize()

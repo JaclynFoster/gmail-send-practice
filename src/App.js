@@ -3,16 +3,21 @@ import './App.css'
 import axios from 'axios'
 import { useState } from 'react'
 
+
+
 function App () {
   const [sendEmail, setSendEmail] = useState('')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
+  
 
   const emailHandler = e => {
+
     e.preventDefault()
     axios
-      .post(`http://localhost:4900/sendEmail`, {
+      .post(`http://localhost:4900/sendMail/${userId}`, {
+      
         email: email,
         name: name,
         message: message
